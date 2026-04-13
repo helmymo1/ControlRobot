@@ -22,19 +22,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Step 1: Clean Build
       - name: Clean build artifacts
         run: flutter clean
 
       - name: Re-install dependencies after clean
         run: flutter pub get
 
-      # Step 2: Build using xcodebuild directly (bypasses Flutter's signing validation)
+      # Build using xcodebuild directly
       - name: Build iOS Release (no codesign)
         run: |
-          # Generate Flutter build config without building
           flutter build ios --release --no-codesign --config-only
-          # Build directly with xcodebuild, fully disabling code signing
           cd ios
           xcodebuild build \
             -workspace Runner.xcworkspace \
@@ -49,27 +46,66 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build/ios/iphoneos" | tail -20
 
-      # Step 3: Nuclear Cleanup - Remove PlugIns and Watch folders
-      - name: Remove PlugIns folder (fixes Sideloadly crash)
-        run: rm -rf build/ios/iphoneos/Runner.app/PlugIns
+      # Nuclear Cleanup for Sideloadly compatibility
+      - name: Strip all code signatures and clean app bundle
+        run: |
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          
+          echo "=== Step 1: Remove PlugIns folder ==="
+          rm -rf "$APP_PATH/PlugIns"
+          
+          echo "=== Step 2: Remove Watch folder ==="
+          rm -rf "$APP_PATH/Watch"
+          
+          echo "=== Step 3: Remove ALL _CodeSignature directories ==="
+          find "$APP_PATH" -name "_CodeSignature" -type d -exec rm -rf {} + 2>/dev/null || true
+          
+          echo "=== Step 4: Remove all .mobileprovision files ==="
+          find "$APP_PATH" -name "*.mobileprovision" -type f -delete 2>/dev/null || true
+          
+          echo "=== Step 5: Remove Mac metadata files ==="
+          find "$APP_PATH" -name "__MACOSX" -type d -exec rm -rf {} + 2>/dev/null || true
+          find "$APP_PATH" -name ".DS_Store" -type f -delete 2>/dev/null || true
+          find "$APP_PATH" -name "._*" -type f -delete 2>/dev/null || true
+          
+          echo "=== Step 6: Remove broken symlinks ==="
+          find "$APP_PATH" -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+          
+          echo "=== Step 7: Ad-hoc re-sign all frameworks ==="
+          if [ -d "$APP_PATH/Frameworks" ]; then
+            for fw in "$APP_PATH/Frameworks"/*.framework; do
+              if [ -d "$fw" ]; then
+                echo "Ad-hoc signing: $fw"
+                codesign --force --deep --sign - "$fw" 2>/dev/null || true
+              fi
+            done
+            for dylib in "$APP_PATH/Frameworks"/*.dylib; do
+              if [ -f "$dylib" ]; then
+                echo "Ad-hoc signing: $dylib"
+                codesign --force --sign - "$dylib" 2>/dev/null || true
+              fi
+            done
+          fi
+          
+          echo "=== Step 8: Ad-hoc sign the main app ==="
+          codesign --force --deep --sign - "$APP_PATH" 2>/dev/null || true
+          
+          echo "=== Cleanup complete ==="
+          echo "App bundle contents:"
+          ls -la "$APP_PATH/"
 
-      - name: Remove Watch folder (fixes Sideloadly crash)
-        run: rm -rf build/ios/iphoneos/Runner.app/Watch
+      # Package as IPA
+      - name: Create IPA package
+        run: |
+          mkdir -p Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -r -X app.ipa Payload
+          echo "IPA size: $(du -h app.ipa | cut -f1)"
 
-      # Step 4: Package as IPA
-      - name: Create Payload directory
-        run: mkdir -p Payload
-
-      - name: Move Runner.app to Payload
-        run: mv build/ios/iphoneos/Runner.app Payload/
-
-      - name: Create IPA archive
-        run: zip -r app.ipa Payload
-
-      # Step 5: Upload Artifact
+      # Upload
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-ipa
+          name: app-ipa-sideload
           path: app.ipa
           retention-days: 30
