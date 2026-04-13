@@ -153,7 +153,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 Opacity(
                   opacity: _fadeAnimation.value,
                   child: Text(
-                    'NEURAL PILOT',
+                    'CONTROL ROBOT',
                     style: GoogleFonts.spaceGrotesk(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -622,7 +622,7 @@ class _CockpitScreenState extends State<CockpitScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(icon: Icon(Icons.arrow_back, color: colors.primary), onPressed: () => Navigator.pop(context)),
-        title: Text('NEURAL PILOT', style: GoogleFonts.spaceGrotesk(color: colors.primary, fontWeight: FontWeight.bold, letterSpacing: 3)),
+        title: Text('CONTROL ROBOT', style: GoogleFonts.spaceGrotesk(color: colors.primary, fontWeight: FontWeight.bold, letterSpacing: 3)),
         centerTitle: true,
         actions: [
           IconButton(icon: Icon(_showTerminal ? Icons.terminal : Icons.terminal_outlined, color: _showTerminal ? colors.secondary : colors.onSurfaceVariant), onPressed: () => setState(() => _showTerminal = !_showTerminal)),
